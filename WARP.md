@@ -123,18 +123,22 @@ curl http://localhost:8000/api/v1/analysis/trending?chain=base
 curl http://localhost:8000/api/v1/analysis/trending?chain=bsc
 ```
 
-## Deep Analysis Endpoint
+### Deep Analysis Endpoint
 
 The `/analysis/deep/{chain}/{address}` endpoint performs comprehensive token analysis by aggregating:
 - Market data (price, volume, liquidity, holder count)
 - Security information (honeypot detection, contract risks)
 - Holder analysis (whale concentration, top buyers)
+- **Adaptive Safety Score** (0-100): Rates token safety based on liquidity, holders, age, security flags, and social presence.
+- **Social Links**: Twitter, Website, Telegram.
+
+**Note on BSC**: Due to upstream limitations, BSC deep analysis relies heavily on the **Trending Cache**. If a BSC token is not found in the trending cache, the fallback direct scrape may be limited or blocked, potentially resulting in a lower safety score due to missing data. The service handles this gracefully (no 500 errors).
 
 **Usage:**
 ```bash
 # Analyze a Solana token
 curl http://localhost:8000/api/v1/analysis/deep/sol/{TOKEN_ADDRESS}
-
+```
 # Analyze an Ethereum token
 curl http://localhost:8000/api/v1/analysis/deep/eth/{TOKEN_ADDRESS}
 ```
@@ -162,4 +166,26 @@ curl http://localhost:8000/api/v1/analysis/deep/eth/{TOKEN_ADDRESS}
   },
   "errors": []
 }
+```
+
+## Signals Endpoints
+
+These endpoints provide real-time triggers for specific trading opportunities.
+
+### Graduation Radar
+Detects tokens on bonding curves (e.g., Pump.fun) nearing completion (95-100%).
+**Use Case:** Catch tokens *before* they list on DEXs like Raydium.
+
+```bash
+# Scan for tokens >95% complete with at least 50 holders
+curl "http://localhost:8000/api/v1/signals/pump-graduation?chain=sol&min_progress=95"
+```
+
+### Early Gem Detection
+Finds newly listed pairs (last 1 hour) with high initial liquidity.
+**Use Case:** Catch high-quality launches immediately.
+
+```bash
+# Scan for new pairs with >$10k liquidity
+curl "http://localhost:8000/api/v1/signals/early-gems?chain=sol&min_liquidity=10000"
 ```

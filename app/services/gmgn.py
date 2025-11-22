@@ -96,7 +96,56 @@ class GMGNClient:
 
     async def get_token_info(self, contract_address: str, chain: str = "sol") -> Dict[str, Any]:
         chain_path = self._get_chain_path(chain)
-        return await self._get(f"/{chain_path}/token-info/{contract_address}")
+        
+        # Wrapper returns 404/500 for BSC sometimes?
+        # If chain is BSC, we might need a fallback if wrapper fails
+        try:
+            data = await self._get(f"/{chain_path}/token-info/{contract_address}")
+            if "error" in data and chain == "bsc":
+                raise Exception("Wrapper failed for BSC")
+            return data
+        except Exception:
+            if chain == "bsc":
+                return await self._get_fallback_bsc_token_info(contract_address)
+            raise
+
+    async def _get_fallback_bsc_token_info(self, address: str) -> Dict[str, Any]:
+        """Direct scrape fallback for BSC token info."""
+        import tls_client
+        from fake_useragent import UserAgent
+        import random
+        
+        identifier = random.choice(
+            [browser for browser in tls_client.settings.ClientIdentifiers.__args__ 
+             if browser.startswith(('chrome', 'safari', 'firefox', 'opera'))]
+        )
+        session = tls_client.Session(
+            random_tls_extension_order=True, 
+            client_identifier=identifier
+        )
+        
+        headers = {
+            'Host': 'gmgn.ai',
+            'accept': 'application/json',
+            'user-agent': UserAgent().random,
+            'referer': 'https://gmgn.ai/?chain=bsc'
+        }
+        
+        url = f"https://gmgn.ai/defi/quotation/v1/tokens/bsc/{address}"
+        
+        loop = asyncio.get_event_loop()
+        def _sync_req():
+            try:
+                resp = session.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("code") == 0 and "data" in data:
+                        return data["data"].get("token", data["data"])
+                return {"error": f"Direct scrape failed: {resp.status_code}"}
+            except Exception as e:
+                return {"error": f"Direct scrape exception: {str(e)}"}
+
+        return await loop.run_in_executor(self.executor, _sync_req)
 
     async def get_new_pairs(self, limit: int = 50, chain: str = "sol") -> Dict[str, Any]:
         chain_path = self._get_chain_path(chain)
@@ -148,11 +197,87 @@ class GMGNClient:
 
     async def get_top_buyers(self, contract_address: str, chain: str = "sol") -> Dict[str, Any]:
         chain_path = self._get_chain_path(chain)
-        return await self._get(f"/{chain_path}/top-buyers/{contract_address}")
+        try:
+            data = await self._get(f"/{chain_path}/top-buyers/{contract_address}")
+            if "error" in data and chain == "bsc":
+                raise Exception("Wrapper failed for BSC")
+            return data
+        except Exception:
+            if chain == "bsc":
+                return await self._get_fallback_bsc_top_buyers(contract_address)
+            raise
+
+    async def _get_fallback_bsc_top_buyers(self, address: str) -> Dict[str, Any]:
+        import tls_client
+        from fake_useragent import UserAgent
+        import random
+        
+        identifier = random.choice(tls_client.settings.ClientIdentifiers.__args__)
+        session = tls_client.Session(client_identifier=identifier)
+        
+        headers = {
+            'Host': 'gmgn.ai',
+            'accept': 'application/json',
+            'user-agent': UserAgent().random,
+            'referer': 'https://gmgn.ai/?chain=bsc'
+        }
+        
+        url = f"https://gmgn.ai/defi/quotation/v1/tokens/top_buyers/bsc/{address}"
+        
+        loop = asyncio.get_event_loop()
+        def _sync_req():
+            try:
+                resp = session.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("code") == 0 and "data" in data:
+                        return data["data"]
+                return {"error": f"Direct scrape failed: {resp.status_code}"}
+            except Exception as e:
+                return {"error": f"Direct scrape exception: {str(e)}"}
+
+        return await loop.run_in_executor(self.executor, _sync_req)
 
     async def get_security_info(self, contract_address: str, chain: str = "sol") -> Dict[str, Any]:
         chain_path = self._get_chain_path(chain)
-        return await self._get(f"/{chain_path}/security-info/{contract_address}")
+        try:
+            data = await self._get(f"/{chain_path}/security-info/{contract_address}")
+            if "error" in data and chain == "bsc":
+                raise Exception("Wrapper failed for BSC")
+            return data
+        except Exception:
+            if chain == "bsc":
+                return await self._get_fallback_bsc_security_info(contract_address)
+            raise
+
+    async def _get_fallback_bsc_security_info(self, address: str) -> Dict[str, Any]:
+        # Fallback for BSC security info
+        import tls_client
+        from fake_useragent import UserAgent
+        import random
+        
+        identifier = random.choice(tls_client.settings.ClientIdentifiers.__args__)
+        session = tls_client.Session(client_identifier=identifier)
+        
+        headers = {
+            'Host': 'gmgn.ai',
+            'accept': 'application/json',
+            'user-agent': UserAgent().random,
+            'referer': 'https://gmgn.ai/?chain=bsc'
+        }
+        
+        url = f"https://gmgn.ai/defi/quotation/v1/tokens/security/bsc/{address}"
+        
+        loop = asyncio.get_event_loop()
+        def _sync_req():
+            resp = session.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("code") == 0 and "data" in data:
+                    return data["data"]
+            return {}
+
+        return await loop.run_in_executor(self.executor, _sync_req)
 
     async def get_wallet_info(self, wallet_address: str, period: str = "7d", chain: str = "sol") -> Dict[str, Any]:
         chain_path = self._get_chain_path(chain)
