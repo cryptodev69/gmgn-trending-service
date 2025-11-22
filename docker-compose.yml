@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: gmgn-trending-service
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - LOG_LEVEL=INFO
+      - POSTGRES_SERVER=db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gmgn
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:14
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gmgn
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
