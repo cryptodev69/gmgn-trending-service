@@ -110,14 +110,18 @@ class GMGNClient:
             raise
 
     async def _get_fallback_bsc_token_info(self, address: str) -> Dict[str, Any]:
-        """Direct scrape fallback for BSC token info."""
+        """
+        Direct scrape fallback for BSC token info.
+        Using new v1 endpoints often fails with 40000300 invalid argument for some tokens.
+        Trying v2 or just rank endpoint if possible, or accepting that some tokens fail.
+        """
         import tls_client
         from fake_useragent import UserAgent
         import random
         
         identifier = random.choice(
             [browser for browser in tls_client.settings.ClientIdentifiers.__args__ 
-             if browser.startswith(('chrome', 'safari', 'firefox', 'opera'))]
+             if browser.startswith(('chrome', 'safari', 'firefox'))]
         )
         session = tls_client.Session(
             random_tls_extension_order=True, 
@@ -131,17 +135,25 @@ class GMGNClient:
             'referer': 'https://gmgn.ai/?chain=bsc'
         }
         
+        # Try different endpoint structure if v1 fails
         url = f"https://gmgn.ai/defi/quotation/v1/tokens/bsc/{address}"
         
         loop = asyncio.get_event_loop()
         def _sync_req():
             try:
-                resp = session.get(url, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("code") == 0 and "data" in data:
-                        return data["data"].get("token", data["data"])
-                return {"error": f"Direct scrape failed: {resp.status_code}"}
+                # Add retries with delay
+                import time
+                for _ in range(2):
+                    resp = session.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("code") == 0 and "data" in data and data["data"].get("token"):
+                            return data["data"]["token"]
+                        elif data.get("code") == 0 and "data" in data:
+                             return data["data"]
+                    time.sleep(1)
+                    
+                return {"error": f"Direct scrape failed: {resp.status_code} - {resp.text[:100]}"}
             except Exception as e:
                 return {"error": f"Direct scrape exception: {str(e)}"}
 
@@ -212,14 +224,16 @@ class GMGNClient:
         from fake_useragent import UserAgent
         import random
         
-        identifier = random.choice(tls_client.settings.ClientIdentifiers.__args__)
+        # Use simpler identifiers to avoid 403
+        identifier = "chrome_120"
         session = tls_client.Session(client_identifier=identifier)
         
         headers = {
             'Host': 'gmgn.ai',
             'accept': 'application/json',
             'user-agent': UserAgent().random,
-            'referer': 'https://gmgn.ai/?chain=bsc'
+            'referer': 'https://gmgn.ai/?chain=bsc',
+            'cookie': '_ga=GA1.1.123456789.1234567890' # Mock cookie sometimes helps
         }
         
         url = f"https://gmgn.ai/defi/quotation/v1/tokens/top_buyers/bsc/{address}"
@@ -227,14 +241,16 @@ class GMGNClient:
         loop = asyncio.get_event_loop()
         def _sync_req():
             try:
+                # 403 usually means WAF block. 
+                # If we fail, return empty list structure so deep analysis doesn't crash
                 resp = session.get(url, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("code") == 0 and "data" in data:
                         return data["data"]
-                return {"error": f"Direct scrape failed: {resp.status_code}"}
+                return {"top_buyers": [], "error": f"Direct scrape restricted: {resp.status_code}"}
             except Exception as e:
-                return {"error": f"Direct scrape exception: {str(e)}"}
+                return {"top_buyers": [], "error": f"Direct scrape exception: {str(e)}"}
 
         return await loop.run_in_executor(self.executor, _sync_req)
 

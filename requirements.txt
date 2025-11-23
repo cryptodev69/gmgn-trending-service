@@ -12,3 +12,5 @@ requests
 pytest
 pandas
 cachetools
+openai
+anthropic

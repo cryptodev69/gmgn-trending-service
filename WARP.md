@@ -189,3 +189,87 @@ Finds newly listed pairs (last 1 hour) with high initial liquidity.
 # Scan for new pairs with >$10k liquidity
 curl "http://localhost:8000/api/v1/signals/early-gems?chain=sol&min_liquidity=10000"
 ```
+
+## AI Assessment Endpoint
+
+The service includes an AI-powered endpoint to generate "degen-style" assessments of tokens. This is designed to be the final step in an automated workflow.
+
+- **Endpoint**: `POST /api/v1/ai/assess`
+- **Supported Providers**: OpenAI (default), Anthropic.
+- **Configuration**: Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env`.
+
+**Example Request:**
+```json
+{
+  "token": {
+    "name": "Pepe",
+    "symbol": "PEPE",
+    "address": "0x...",
+    "chain": "sol",
+    "market_cap": 1000000,
+    "liquidity": 50000,
+    "holder_count": 1000
+  },
+  "security": {
+    "is_honeypot": false,
+    "is_mintable": false
+  },
+  "safety_score": 85
+}
+```
+
+**Example Response:**
+```json
+{
+  "verdict": "BULLISH",
+  "summary": "This coin is sending signals...",
+  "risk": {
+    "risk_level": "LOW",
+    "score": 85,
+    "positive_signals": ["High liquidity", "Renounced contract"]
+  },
+  "meme_potential_score": 92
+}
+```
+
+## N8N Integration Workflow
+
+This service is designed to be orchestrated by **n8n**. A typical workflow for finding and analyzing 100x gems involves:
+
+1.  **Trigger**: Run on a schedule (e.g., every 5-10 minutes).
+2.  **Step 1: Fetch Trending Tokens**
+    - **Node**: HTTP Request
+    - **URL**: `GET http://host.docker.internal:8000/api/v1/analysis/trending?chain=sol&min_consistency=2`
+    - **Purpose**: Get a list of potential candidates.
+3.  **Step 2: Iterate & Filter**
+    - **Node**: Loop over items.
+    - **Logic**: Filter by `safety_score` or other basic metrics.
+4.  **Step 3: Deep Analysis**
+    - **Node**: HTTP Request
+    - **URL**: `GET http://host.docker.internal:8000/api/v1/analysis/deep/sol/{{$json.address}}`
+    - **Purpose**: Get detailed security, holder, and social data.
+5.  **Step 4: AI Assessment (The "Degen Check")**
+    - **Node**: HTTP Request
+    - **Method**: POST
+    - **URL**: `http://host.docker.internal:8000/api/v1/ai/assess`
+    - **Body**: JSON
+    - **Payload**: Construct the payload using data from Step 3.
+      ```json
+      {
+        "token": {
+          "name": "{{$json.market_data.name}}",
+          "symbol": "{{$json.market_data.symbol}}",
+          "address": "{{$json.address}}",
+          "chain": "{{$json.chain}}",
+          "market_cap": {{$json.market_data.market_cap}},
+          "liquidity": {{$json.market_data.liquidity}},
+          "holder_count": {{$json.market_data.holder_count}}
+        },
+        "security": {{$json.security}},
+        "social": {{$json.socials}},
+        "safety_score": {{$json.safety.score}}
+      }
+      ```
+6.  **Step 5: Alert/Action**
+    - **Node**: Telegram/Discord/Slack
+    - **Logic**: If `verdict` is "BULLISH" and `meme_potential_score` > 80, send an alert with the summary and entry suggestion.

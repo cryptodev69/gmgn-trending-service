@@ -17,6 +17,11 @@ def calculate_safety_score(market: Dict[str, Any], security: Dict[str, Any], hol
     # 1. Liquidity (Max 30 pts)
     # > $100k = 30pts, > $50k = 20pts, > $10k = 10pts
     liquidity = market.get("liquidity") or 0
+    try:
+        liquidity = float(liquidity)
+    except (ValueError, TypeError):
+        liquidity = 0
+        
     liq_score = 0
     if liquidity > 100000:
         liq_score = 30
@@ -32,6 +37,12 @@ def calculate_safety_score(market: Dict[str, Any], security: Dict[str, Any], hol
     # 2. Holder Count (Max 20 pts)
     # > 1000 = 20pts, > 500 = 15pts, > 100 = 5pts
     holder_count = market.get("holder_count") or 0
+    # Ensure holder_count is numeric
+    try:
+        holder_count = int(holder_count)
+    except (ValueError, TypeError):
+        holder_count = 0
+        
     holder_score = 0
     if holder_count > 1000:
         holder_score = 20
@@ -49,11 +60,14 @@ def calculate_safety_score(market: Dict[str, Any], security: Dict[str, Any], hol
     created_ts = market.get("created_timestamp")
     age_score = 0
     if created_ts:
-        age_hours = (time.time() - created_ts) / 3600
-        if age_hours > 168: # 7 days
-            age_score = 10
-        elif age_hours > 24:
-            age_score = 5
+        try:
+             age_hours = (time.time() - float(created_ts)) / 3600
+             if age_hours > 168: # 7 days
+                age_score = 10
+             elif age_hours > 24:
+                age_score = 5
+        except (ValueError, TypeError):
+             pass # Invalid timestamp
     
     score += age_score
     max_score += 10
@@ -239,7 +253,7 @@ async def deep_analyze_token(address: str, chain: str = "sol") -> Dict[str, Any]
         if isinstance(top_buyers, Exception):
             response["errors"].append(f"Top buyers error: {str(top_buyers)}")
         elif isinstance(top_buyers, dict):
-            if "error" in top_buyers:
+            if "error" in top_buyers and not top_buyers.get("top_buyers"): # Allow partial data if key exists
                  response["errors"].append(f"Top buyers error: {top_buyers['error']}")
             else:
                 buyers_list = top_buyers if isinstance(top_buyers, list) else top_buyers.get("top_buyers", [])
