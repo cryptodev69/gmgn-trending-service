@@ -190,6 +190,15 @@ Finds newly listed pairs (last 1 hour) with high initial liquidity.
 curl "http://localhost:8000/api/v1/signals/early-gems?chain=sol&min_liquidity=10000"
 ```
 
+### Momentum Scanner
+Detects tokens with high trading volume relative to market cap (Turnover) and positive price momentum.
+**Use Case:** Catching breakouts and high-interest tokens in real-time.
+
+```bash
+# Scan for tokens with turnover >20% and price up >10%
+curl "http://localhost:8000/api/v1/signals/momentum?chain=sol&min_vol_mcap_ratio=0.2&min_price_change=10"
+```
+
 ## AI Assessment Endpoint
 
 The service includes an AI-powered endpoint to generate "degen-style" assessments of tokens. This is designed to be the final step in an automated workflow.

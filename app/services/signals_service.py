@@ -138,3 +138,68 @@ async def get_early_gem_signals(
             continue
             
     return signals
+
+async def get_momentum_signals(
+    chain: str = "sol",
+    min_vol_mcap_ratio: float = 0.2, # Volume is 20% of Market Cap
+    min_price_change_1h: float = 10.0
+) -> List[Dict[str, Any]]:
+    """
+    Detect tokens with high momentum (Volume/MCap ratio and positive price action).
+    Uses 1h trending data source.
+    """
+    from app.services.analysis_service import get_trending_data_with_cache
+    
+    # Reuse trending cache to be efficient
+    data = await get_trending_data_with_cache("1h", chain)
+    
+    raw_tokens = []
+    if isinstance(data, dict):
+        raw_tokens = data.get("tokens") or data.get("rank") or []
+        
+    signals = []
+    
+    for token in raw_tokens:
+        try:
+            market_cap = float(token.get("market_cap") or 0)
+            volume_24h = float(token.get("volume") or 0) 
+            # Note: GMGN trending often gives 24h volume. 
+            # If we want stricter momentum, we'd want shorter timeframe volume, but 24h/MCap is a standard "Turnover" metric.
+            
+            price_change = float(token.get("price_change_percent") or 0)
+            
+            if market_cap <= 0:
+                continue
+                
+            vol_mcap_ratio = volume_24h / market_cap
+            
+            # Filters
+            if vol_mcap_ratio < min_vol_mcap_ratio:
+                continue
+            if price_change < min_price_change_1h:
+                continue
+                
+            signals.append({
+                "signal_type": "momentum_breakout",
+                "chain": chain,
+                "address": token.get("address"),
+                "symbol": token.get("symbol"),
+                "metrics": {
+                    "turnover_ratio": round(vol_mcap_ratio, 2),
+                    "price_change_1h": price_change, # Actually might be 24h depending on source, but labelled 1h in trending
+                    "volume": volume_24h,
+                    "market_cap": market_cap
+                },
+                "explanation": (
+                    f"High momentum detected: Turnover ratio {round(vol_mcap_ratio*100)}% "
+                    f"(> {min_vol_mcap_ratio*100}%) with +{round(price_change)}% price action."
+                )
+            })
+            
+        except (ValueError, TypeError):
+            continue
+            
+    # Sort by turnover ratio descending (hottest first)
+    signals.sort(key=lambda x: x["metrics"]["turnover_ratio"], reverse=True)
+    
+    return signals
